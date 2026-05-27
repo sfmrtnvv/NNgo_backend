@@ -1,106 +1,79 @@
-from fastapi import APIRouter
-from fastapi.responses import HTMLResponse
-from pydantic import BaseModel
+from fastapi import APIRouter, Query
+from fastapi.responses import HTMLResponse, RedirectResponse
 
-router = APIRouter()
-
-
-# =========================
-# МОДЕЛЬ ДАННЫХ
-# =========================
-
-class AlisaRequest(BaseModel):
-    command: str
+router = APIRouter(
+    prefix="/routes",
+    tags=["routes"]
+)
 
 
-# =========================
-# МАРШРУТЫ
-# =========================
-
-routes_data = {
-
-    "центр": [
-        [56.328674, 44.002018],  # Кремль
-        [56.328072, 44.005517],  # Чкаловская лестница
-        [56.324062, 44.000168],  # Покровская
-        [56.321169, 43.999050],  # Рождественская
-        [56.317500, 44.015000],  # Набережная
-    ],
-
-    "парки": [
-        [56.296503, 43.936059],  # Швейцария
-        [56.314839, 43.989769],  # Кулибина
-        [56.329949, 44.024129],  # Александровский сад
-    ],
-
-    "музеи": [
-        [56.325453, 44.006210],
-        [56.321916, 44.001123],
-        [56.327534, 44.011429],
-    ]
-}
+@router.get("/")
+async def root():
+    return {"message": "NNgo API работает"}
 
 
-# =========================
-# ОСНОВНАЯ КАРТА
-# =========================
+@router.get("/request")
+async def request_route(text: str = Query(...)):
 
-@router.get("/map", response_class=HTMLResponse)
-async def show_map():
+    text = text.lower()
 
-    return create_map(routes_data["центр"])
+    if "кофе" in text:
+        theme = "cafe"
+
+    elif "ресторан" in text:
+        theme = "restaurant"
+
+    elif "парк" in text:
+        theme = "park"
+
+    elif "музей" in text:
+        theme = "museum"
+
+    else:
+        theme = "center"
+
+    return RedirectResponse(
+        url=f"/routes/route?theme={theme}"
+    )
 
 
-# =========================
-# ДИНАМИЧЕСКИЙ МАРШРУТ
-# =========================
+@router.get("/route", response_class=HTMLResponse)
+async def build_route(theme: str = "center"):
 
-@router.get("/route/{route_name}", response_class=HTMLResponse)
-async def dynamic_route(route_name: str):
+    routes = {
 
-    points = routes_data.get(route_name)
+        "cafe": [
+            [56.3285, 44.0020],
+            [56.3234, 44.0087],
+            [56.3208, 44.0065],
+            [56.3249, 44.0210]
+        ],
 
-    if not points:
-        return HTMLResponse("<h1>Маршрут не найден</h1>")
+        "restaurant": [
+            [56.3270, 44.0040],
+            [56.3290, 44.0100],
+            [56.3250, 44.0180]
+        ],
 
-    return create_map(points)
+        "park": [
+            [56.3260, 44.0050],
+            [56.3190, 44.0150],
+            [56.3150, 44.0200]
+        ],
 
+        "museum": [
+            [56.3272, 44.0022],
+            [56.3288, 44.0085],
+            [56.3250, 44.0130]
+        ],
 
-# =========================
-# ALISA AI
-# =========================
-
-@router.post("/alisa/")
-async def alisa(data: AlisaRequest):
-
-    command = data.command.lower()
-
-    route_name = "центр"
-
-    if "парк" in command:
-        route_name = "парки"
-
-    elif "музе" in command:
-        route_name = "музеи"
-
-    elif "центр" in command:
-        route_name = "центр"
-
-    map_url = f"http://localhost:8000/routes/route/{route_name}"
-
-    return {
-        "response": {
-            "text": f"Маршрут построен: {map_url}",
-            "end_session": False
-        }
+        "center": [
+            [56.3269, 44.0059],
+            [56.3275, 44.0080]
+        ]
     }
 
-
-# =========================
-# СОЗДАНИЕ КАРТЫ
-# =========================
-
-def create_map(points):
+    points = routes.get(theme, routes["center"])
 
     return f"""
 <!DOCTYPE html>
@@ -112,15 +85,27 @@ def create_map(points):
 
 <title>NNgo Route</title>
 
-<script src="https://api-maps.yandex.ru/2.1/?lang=ru_RU"></script>
+<link
+ rel="stylesheet"
+ href="https://unpkg.com/leaflet/dist/leaflet.css"
+/>
+
+<link
+ rel="stylesheet"
+ href="https://unpkg.com/leaflet-routing-machine/dist/leaflet-routing-machine.css"
+/>
 
 <style>
 
-html, body, #map {{
-    width: 100%;
-    height: 100%;
-    margin: 0;
-    padding: 0;
+html, body {{
+    margin:0;
+    width:100%;
+    height:100%;
+}}
+
+#map {{
+    width:100%;
+    height:100vh;
 }}
 
 </style>
@@ -131,46 +116,53 @@ html, body, #map {{
 
 <div id="map"></div>
 
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+
+<script src="https://unpkg.com/leaflet-routing-machine/dist/leaflet-routing-machine.js"></script>
+
 <script>
 
-ymaps.ready(init);
+const points = {points};
 
-function init() {{
+const map = L.map('map').setView(
+    [56.3269, 44.0059],
+    13
+);
 
-    const map = new ymaps.Map("map", {{
-        center: [56.326797, 44.006516],
-        zoom: 13
-    }});
+L.tileLayer(
+    'https://tile.openstreetmap.org/{{z}}/{{x}}/{{y}}.png',
+    {{
+        attribution: 'OpenStreetMap'
+    }}
+).addTo(map);
 
-    const points = {points};
 
-    points.forEach(point => {{
+L.Routing.control({{
 
-        const placemark = new ymaps.Placemark(point);
+    waypoints: points.map(
+        p => L.latLng(p[0], p[1])
+    ),
 
-        map.geoObjects.add(placemark);
-    }});
+    routeWhileDragging: false,
+    addWaypoints: false,
+    draggableWaypoints: false,
+    fitSelectedRoutes: true,
+    show: false,
 
-    const routeLine = new ymaps.Polyline(
-        points,
-        {{}},
-        {{
-            strokeColor: "#ff0000",
-            strokeWidth: 6,
-            strokeOpacity: 0.9
-        }}
-    );
+    lineOptions: {{
+        styles: [
+            {{
+                color: 'red',
+                opacity: 0.8,
+                weight: 6
+            }}
+        ]
+    }}
 
-    map.geoObjects.add(routeLine);
-
-    map.setBounds(routeLine.geometry.getBounds(), {{
-        checkZoomRange: true
-    }});
-}}
+}}).addTo(map);
 
 </script>
 
 </body>
-
 </html>
 """
