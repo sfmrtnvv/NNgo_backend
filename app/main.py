@@ -15,7 +15,9 @@ async def home():
 <html>
 
 <head>
+
 <meta charset="utf-8">
+
 <title>NNgo AI</title>
 
 <style>
@@ -60,6 +62,7 @@ button:hover{
 }
 
 </style>
+
 </head>
 
 <body>
@@ -94,5 +97,6 @@ function goRoute(){
 </script>
 
 </body>
+
 </html>
 """
